@@ -121,9 +121,6 @@ def etl(postgresql_table, mysql_table):
         # Pull data from PostgreSQL
         query = f"SELECT * FROM {postgresql_table}"
         df = pd.read_sql_query(query, psql_engine)
-
-        # Create DataFrame
-        df = pd.DataFrame(data)
         logging.info("Data pulled from PostgreSQL.")
 
         # Perform transformations on the data
