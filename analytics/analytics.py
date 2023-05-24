@@ -51,89 +51,94 @@ def log_decorator(func):
 
     def decorator_wrapper(*args, **kwargs):
         try:
-            value = func(*args, **kwargs)
-            logging.info(f"function {func.__name__} completed successfully")
-            return value
+            return func(*args, **kwargs)
         except Exception as e:
-            logging.error(f"Error occurred in function {func.__name__}: {e}")
+            logging.exception(e)
             raise
 
     return decorator_wrapper
 
 
-@log_decorator
 def mysql_connection():
-    "This function is to make a connection to MYSQL database"
-    try:
-        # Connect to MySQL
-        mysql_engine = create_engine(
-            environ["MYSQL_CS"], pool_pre_ping=True, pool_size=10
-        )
-        return mysql_engine
-    except Exception as e:
-        logging.error(f"Error occurred while connecting to MySQL: {e}")
-        raise
+    """
+    This function is to make a connection to MYSQL database
+    """
+    logging.info(f"inside function {mysql_connection.__name__}")
+    mysql_engine = create_engine(environ["MYSQL_CS"], pool_pre_ping=True, pool_size=10)
+    return mysql_engine
 
 
-@log_decorator
 def distance_calculator(row):
     """
     This function calculates the distance between co-ordinates. Uses geopy library
     """
-    try:
-        starting_coordinates = (33.05096, 15.21229)  # This values are assumed
-        ending_coordinates = (row["location"]["latitude"], row["location"]["longitude"])
-        distance = geodesic(starting_coordinates, ending_coordinates).km
-        return distance
-    except Exception as e:
-        logging.error(f"Error occurred: {e}")
-        raise
+    starting_coordinates = (33.05096, 15.21229)  # This values are assumed
+    ending_coordinates = (row["location"]["latitude"], row["location"]["longitude"])
+    distance = geodesic(starting_coordinates, ending_coordinates).km
+    return distance
 
 
-@log_decorator
 def transform_data(df):
-    try:
-        # Convert unix timestamp column to DateTime type
-        df["timestamp"] = pd.to_datetime(df["time"], unit="s")
-        # create a new column with calculated distance values
-        df["distance_km"] = df.apply(distance_calculator, axis=1)
-        # Group data by device_id and hour component of timestamp
-        # calculate maximum temperature
-        # amount of data points
-        # total distance
-        result = (
-            df.groupby(["device_id", pd.Grouper(key="timestamp", freq="H")])
-            .aggregate(
-                {"temperature": "max", "device_id": "count", "distance_km": "sum"}
-            )
-            .rename(
-                columns={
-                    "temperature": "max_temperature",
-                    "device_id": "no_of_occurences",
-                    "distance_km": "total_distance",
-                }
-            )
-            .reset_index()
+    """
+    This function uses pandas dataframe and performs transformation
+    """
+    logging.info(f"inside function {transform_data.__name__}")
+    # Convert unix timestamp column to DateTime type
+    df["timestamp"] = pd.to_datetime(df["time"], unit="s")
+    # create a new column with calculated distance values
+    df["distance_km"] = df.apply(distance_calculator, axis=1)
+    # Group data by device_id and hour component of timestamp
+    # calculate maximum temperature
+    # amount of data points
+    # total distance
+    result = (
+        df.groupby(["device_id", pd.Grouper(key="timestamp", freq="H")])
+        .aggregate({"temperature": "max", "device_id": "count", "distance_km": "sum"})
+        .rename(
+            columns={
+                "temperature": "max_temperature",
+                "device_id": "no_of_occurences",
+                "distance_km": "total_distance",
+            }
         )
-        return df
-    except Exception as e:
-        logging.error(f"Error occurred while transforming data: {e}")
-        raise
+        .reset_index()
+    )
+    return df
 
 
 @log_decorator
 def etl(postgresql_table, mysql_table):
+    """
+    This function combines the other functions and performs ETL
+
+    Args:
+    postgresql_table (str): Table name in postgresql database
+    mysql_table (str): Table name in MYSQL database
+    """
     try:
         create_log_file()
 
         # Pull data from PostgreSQL
-        query = f"SELECT * FROM {postgresql_table}"
-        df = pd.read_sql_query(query, psql_engine)
+        # query = f"SELECT * FROM {postgresql_table}"
+        # df = pd.read_sql_query(query, psql_engine)
+        data = {
+            "device_id": ["123", "456", "123"],
+            "temperature": [30, 25, 35],
+            "location": [
+                {"longitude": 45.23, "latitude": 68.56},
+                {"longitude": 89.3, "latitude": 56.5},
+                {"longitude": 86.4, "latitude": 56.2},
+            ],
+            "time": [1684902231, 1684907751, 1684904151],
+        }
+
+        # Create DataFrame
+        df = pd.DataFrame(data)
         logging.info("Data pulled from PostgreSQL.")
 
         # Perform transformations on the data
         transformed_df = transform_data(df)
-        logging.info("Data transformed.")
+        logging.info("Data transformation completed.")
 
         # Connect to MySQL
         mysql_engine = mysql_connection()
@@ -144,11 +149,13 @@ def etl(postgresql_table, mysql_table):
             mysql_table, mysql_engine, if_exists="append", index=False
         )
         logging.info("Data inserted into MySQL.")
+        print("ETL process completed")
 
     except Exception as e:
-        logging.error("An error occurred: %s", str(e))
         raise
 
 
+# call the main function `etl` by passing the table names
 etl("devices", "agg_devices")
+
 logging.info("Data transformation and insertion completed successfully!")
