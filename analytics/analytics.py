@@ -119,18 +119,8 @@ def etl(postgresql_table, mysql_table):
         create_log_file()
 
         # Pull data from PostgreSQL
-        # query = f"SELECT * FROM {postgresql_table}"
-        # df = pd.read_sql_query(query, psql_engine)
-        data = {
-            "device_id": ["123", "456", "123"],
-            "temperature": [30, 25, 35],
-            "location": [
-                {"longitude": 45.23, "latitude": 68.56},
-                {"longitude": 89.3, "latitude": 56.5},
-                {"longitude": 86.4, "latitude": 56.2},
-            ],
-            "time": [1684902231, 1684907751, 1684904151],
-        }
+        query = f"SELECT * FROM {postgresql_table}"
+        df = pd.read_sql_query(query, psql_engine)
 
         # Create DataFrame
         df = pd.DataFrame(data)
