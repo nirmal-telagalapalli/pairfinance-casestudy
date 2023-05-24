@@ -32,9 +32,10 @@ def create_log_file():
     """
     This function creates a log file
     """
-    # Set up logging
+    # logfile name with timestamp
     log_filename = "etl_" + datetime.now().strftime("%Y-%m-%d_%H-%M-%S") + ".log"
     log_file_path = os.path.join(log_dir, log_filename)
+    # set up logging
     logging.basicConfig(
         filename=log_file_path,
         level=logging.INFO,
@@ -50,9 +51,11 @@ def log_decorator(func):
 
     def decorator_wrapper(*args, **kwargs):
         try:
-            return func(*args, **kwargs)
+            value = func(*args, **kwargs)
+            logging.info(f"function {func.__name__} completed successfully")
+            return value
         except Exception as e:
-            logging.error(f"Error occurred: {e}")
+            logging.error(f"Error occurred in function {func.__name__}: {e}")
             raise
 
     return decorator_wrapper
@@ -78,7 +81,7 @@ def distance_calculator(row):
     This function calculates the distance between co-ordinates. Uses geopy library
     """
     try:
-        starting_coordinates = (45, 89)  # This values are assumed
+        starting_coordinates = (33.05096, 15.21229)  # This values are assumed
         ending_coordinates = (row["location"]["latitude"], row["location"]["longitude"])
         distance = geodesic(starting_coordinates, ending_coordinates).km
         return distance
@@ -91,7 +94,7 @@ def distance_calculator(row):
 def transform_data(df):
     try:
         # Convert unix timestamp column to DateTime type
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="s")
+        df["timestamp"] = pd.to_datetime(df["time"], unit="s")
         # create a new column with calculated distance values
         df["distance_km"] = df.apply(distance_calculator, axis=1)
         # Group data by device_id and hour component of timestamp
@@ -99,12 +102,14 @@ def transform_data(df):
         # amount of data points
         # total distance
         result = (
-            df.groupby(["device", pd.Grouper(key="timestamp", freq="H")])
-            .aggregate({"temperature": "max", "device": "count", "distance_km": "sum"})
+            df.groupby(["device_id", pd.Grouper(key="timestamp", freq="H")])
+            .aggregate(
+                {"temperature": "max", "device_id": "count", "distance_km": "sum"}
+            )
             .rename(
                 columns={
                     "temperature": "max_temperature",
-                    "device": "no_of_occurences",
+                    "device_id": "no_of_occurences",
                     "distance_km": "total_distance",
                 }
             )
@@ -119,6 +124,8 @@ def transform_data(df):
 @log_decorator
 def etl(postgresql_table, mysql_table):
     try:
+        create_log_file()
+
         # Pull data from PostgreSQL
         query = f"SELECT * FROM {postgresql_table}"
         df = pd.read_sql_query(query, psql_engine)
